@@ -44,6 +44,7 @@ REQUIRED_PACKAGES = [
     'MySQL-python>=1.2.5',
     'netaddr>=0.7.19',
     'PyYAML>=3.12',
+    'python-json-logger>=0.1.8',
     'ratelimiter>=1.1.0',
     'retrying>=1.3.3',
     'requests[security]>=2.18.4',
@@ -51,11 +52,13 @@ REQUIRED_PACKAGES = [
     'pygraph>=0.2.1',
     'unicodecsv>=0.14.1',
     'simple-crypt>=4.1.7',
+
     # Setup related.
     'google-apputils>=0.4.2',
     'grpcio',
     'grpcio-tools',
     'protobuf>=3.2.0',
+
     # Testing related.
     'mock>=2.0.0',
     'parameterized>=0.6.1',
