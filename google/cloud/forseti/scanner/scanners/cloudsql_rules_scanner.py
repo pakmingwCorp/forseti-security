@@ -131,6 +131,9 @@ class CloudSqlAclScanner(base_scanner.BaseScanner):
 
     def run(self):
         """Runs the data collection."""
+        
+        LOGGER.info('11111111111111111111111111111')
+        
         cloudsql_acls = self._retrieve()
         all_violations = self._find_violations(cloudsql_acls)
         self._output_results(all_violations)
