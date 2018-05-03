@@ -137,7 +137,9 @@ class CloudSqlAclScanner(base_scanner.BaseScanner):
         LOGGER.info('2222222222\n'
                     '3333333333')
         LOGGER.info('4444444444\n5555555555')
-        LOGGER.info({'message': '6666666666\n7777777777'})
+        LOGGER.info('6666666666\t7777777777')
+        LOGGER.info('8888888888\t'
+                    '9999999999')
         
         cloudsql_acls = self._retrieve()
         all_violations = self._find_violations(cloudsql_acls)
