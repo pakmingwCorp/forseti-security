@@ -65,7 +65,7 @@ REQUIRED_PACKAGES = [
     'ruamel.yaml>=0.15.35',
     'pylint',
     'pylint-quotes',
-    'SQLAlchemy>=1.1.9',
+    'SQLAlchemy==1.1.18',
 ]
 
 if sys.version_info < (2, 7):
