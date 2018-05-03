@@ -17,10 +17,8 @@
 Setup logging for Forseti Security. Logs to console and syslog.
 """
 
+import logging
 import logging.handlers
-
-from pythonjsonlogger import jsonlogger
-
 
 DEFAULT_LOG_FMT = ('%(asctime)s %(levelname)s '
                    '%(name)s(%(funcName)s): %(message).1024s')
@@ -46,11 +44,9 @@ def get_logger(module_name):
     Returns:
         logger: An instance of the configured logger.
     """
-    json_formatter = jsonlogger.JsonFormatter(prefix=SYSLOG_LOG_FMT)
-    
     # TODO: Move this into a configuration file.
     syslog_handler = logging.handlers.SysLogHandler()
-    syslog_handler.setFormatter(logging.Formatter(json_formatter))
+    syslog_handler.setFormatter(logging.Formatter(SYSLOG_LOG_FMT))
 
     logger_instance = logging.getLogger(module_name)
     logger_instance.addHandler(syslog_handler)
