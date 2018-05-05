@@ -45,7 +45,7 @@ def get_logger(module_name):
         logger: An instance of the configured logger.
     """
     # TODO: Move this into a configuration file.
-    syslog_handler = logging.handlers.SysLogHandler(address="/var/log/syslog")
+    syslog_handler = logging.handlers.SysLogHandler(address='/dev/log')
     syslog_handler.setFormatter(logging.Formatter(SYSLOG_LOG_FMT))
 
     logger_instance = logging.getLogger(module_name)
