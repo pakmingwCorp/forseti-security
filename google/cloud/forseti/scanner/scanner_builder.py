@@ -44,6 +44,8 @@ class ScannerBuilder(object):
         self.model_name = model_name
         self.snapshot_timestamp = snapshot_timestamp
 
+        LOGGER.debug(str(self.scanner_configs))
+
     def build(self):
         """Build the enabled scanners to run.
 
