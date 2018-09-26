@@ -17,13 +17,15 @@
 import abc
 import os
 import shutil
+import datetime
+import calendar
 
 from google.cloud.forseti.common.gcp_api import storage
 from google.cloud.forseti.common.util import logger
 from google.cloud.forseti.common.util import string_formats
 from google.cloud.forseti.common.util.index_state import IndexState
 from google.cloud.forseti.services.scanner import dao as scanner_dao
-
+from google.cloud.forseti.scanner import scanner_requirements_map
 
 LOGGER = logger.get_logger(__name__)
 
@@ -115,3 +117,58 @@ class BaseScanner(object):
             violation_access.session, inventory_index_id,
             index_state=IndexState.RUNNING)
         violation_access.create(violations, scanner_index_id)
+
+    @property
+    def scanner_name(self):
+        """Provides the scanner name.
+
+        Returns:
+            str: The scanner name.
+        """
+        class_name = self.__class__.__name__
+        scanner_name = [k for k, v in \
+                   scanner_requirements_map.REQUIREMENTS_MAP.iteritems() \
+                   if v['class_name'] == class_name][0]
+
+        return scanner_name
+
+    @property
+    def config(self):
+        """Provides the dictionary configuration of the scanner.
+
+        Returns:
+            dict: {name: str, enabled: str, weekdays: list}.
+        """
+        config = [config for config in self.scanner_configs['scanners'] \
+                  if config['name'] == self.scanner_name]
+        if not config:
+            return None
+        return config[0]
+
+    @property
+    def weekdays(self):
+        """Provides the weekdays to run the scanner.  If not
+           defined in the server configuration, all weekdays
+           are returned.
+
+        Returns:
+            list: The string representation of days to run
+                  the scanner.
+        """
+        weekdays = []
+        try:
+            weekdays = self.config['weekdays']
+        except KeyError:
+            weekdays = list(calendar.day_name)
+        return weekdays
+
+    @property
+    def run_today(self):
+        """Whether or not to run the scanner today based on
+           the scanner configuration.
+
+        Returns:
+            bool: True/False
+        """
+        return datetime.datetime.now().strftime('%A') \
+               in self.weekdays

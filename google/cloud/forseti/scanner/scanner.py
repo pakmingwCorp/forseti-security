@@ -107,19 +107,25 @@ def run(model_name=None, progress_queue=None, service_config=None):
         succeeded = []
         failed = []
         for scanner in runnable_scanners:
-            try:
-                scanner.run()
-                progress_queue.put('Running {}...'.format(
-                    scanner.__class__.__name__))
-            except Exception:  # pylint: disable=broad-except
-                log_message = 'Error running scanner: {}'.format(
-                    scanner.__class__.__name__)
-                progress_queue.put(log_message)
-                LOGGER.exception(log_message)
-                failed.append(scanner.__class__.__name__)
+            if scanner.run_today:
+                try:
+                    scanner.run()
+                    progress_queue.put('Running {}...'.format(
+                        scanner.__class__.__name__))
+                except Exception:  # pylint: disable=broad-except
+                    log_message = 'Error running scanner: {}'.format(
+                        scanner.__class__.__name__)
+                    progress_queue.put(log_message)
+                    LOGGER.exception(log_message)
+                    failed.append(scanner.__class__.__name__)
+                else:
+                    succeeded.append(scanner.__class__.__name__)
+                session.flush()
             else:
-                succeeded.append(scanner.__class__.__name__)
-            session.flush()
+                LOGGER.debug('Skipped scanner %s due to weekdays %s.',
+                             scanner.__class__.__name__,
+                             scanner.weekdays)
+
         # pylint: enable=bare-except
         log_message = 'Scan completed!'
         mark_scanner_index_complete(

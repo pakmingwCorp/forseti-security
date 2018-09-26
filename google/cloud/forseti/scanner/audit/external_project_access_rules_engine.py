@@ -60,7 +60,7 @@ class ExternalProjectAccessRulesEngine(bre.BaseRulesEngine):
 
         Args:
             user_email (str): The ID of the project
-            project_ancestry (list): List of ancestries which turn 
+            project_ancestry (list): List of ancestries which turn
                                      out to a list of resources.
             force_rebuild (bool): Force the rebuild of the rule book
 
@@ -76,11 +76,17 @@ class ExternalProjectAccessRulesEngine(bre.BaseRulesEngine):
         rules_violated = [rule for ancestor, rule in \
                           self.rule_book.resource_rules_map.iteritems() if \
                           ancestor not in project_ancestry]
+        # If there is at least rule not violated, that means that a project
+        # meets the whitelisting requirements.
+        rules_not_violated = [rule for ancestor, rule in \
+                             self.rule_book.resource_rules_map.iteritems() \
+                             if rule not in rules_violated]
 
-        for rule in rules_violated:
-            violations = itertools.chain(
-                violations,
-                rule.policy_violation(user_email, project_ancestry))
+        if not rules_not_violated:
+            for rule in rules_violated:
+                violations = itertools.chain(
+                    violations,
+                    rule.policy_violation(user_email, project_ancestry))
 
         return violations
 
@@ -90,7 +96,6 @@ class ExternalProjectAccessRuleBook(bre.BaseRuleBook):
     # Class variable for matching the ancestor during rule validation
     ancestor_pattern = re.compile(r'^organizations/\d+$|^folders/\d+$')
 
-    #pylint: disable=W0613
     def __init__(self, global_configs=None, rule_defs=None):
         """Initialization.
 
@@ -101,11 +106,14 @@ class ExternalProjectAccessRuleBook(bre.BaseRuleBook):
         super(ExternalProjectAccessRuleBook, self).__init__()
         self.resource_rules_map = dict()
 
+        root_resource_id = global_configs.get_root_resource_id()
+        default_rule = dict(name='Default', ancestor=root_resource_id)
+
         if not rule_defs:
-            self.rule_defs = {}
-        else:
-            self.rule_defs = rule_defs
-            self.add_rules(rule_defs)
+            rule_defs = dict(rules=[])
+
+        rule_defs['rules'].insert(0, default_rule)
+        self.add_rules(rule_defs)
 
     def add_rules(self, rule_defs):
         """Add rules to the rule book.
@@ -151,7 +159,8 @@ class ExternalProjectAccessRuleBook(bre.BaseRuleBook):
         ancestor = rule_def.get('ancestor', None)
         cls.validate_ancestor(ancestor, rule_index)
         return resource_util.create_resource(ancestor.split('/')[1],
-                                             resource_util.type_from_name(ancestor))
+                                             resource_util.type_from_name(
+                                                 ancestor))
 
     @classmethod
     def validate_ancestor(cls, ancestor, rule_index):
@@ -206,7 +215,7 @@ class Rule(object):
             resource_id=ancestry[0].id,
             rule_name=self.rule_name,
             rule_index=self.rule_index,
-            rule_ancestor=self.rules.name,
+            rule_ancestor=self.rules,
             full_name=ancestry[0].name,
             violation_type='EXTERNAL_PROJECT_ACCESS_VIOLATION',
             member=user_email,

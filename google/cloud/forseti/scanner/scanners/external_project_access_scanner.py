@@ -72,7 +72,7 @@ class ExternalProjectAccessScanner(base_scanner.BaseScanner):
             all_violations (list): A list of violations.
         """
         all_violations = self._flatten_violations(all_violations)
-            
+
         self._output_results_to_db(all_violations)
 
 
@@ -88,7 +88,8 @@ class ExternalProjectAccessScanner(base_scanner.BaseScanner):
         all_violations = []
         LOGGER.info('Finding project access violations...')
 
-        for user_mail, project_ancestries in project_ancestries_by_user.iteritems():
+        for user_mail, project_ancestries in \
+            project_ancestries_by_user.iteritems():
             for project_ancestry in project_ancestries:
                 violations = self.rules_engine.find_policy_violations(user_mail,
                                                                       project_ancestry)
@@ -110,7 +111,8 @@ class ExternalProjectAccessScanner(base_scanner.BaseScanner):
 
             violation_data = {
                 'full_name': violation.full_name,
-                'member': violation.member
+                'member': violation.member,
+                'rule_ancestor': violation.rule_ancestor.name
             }
 
             yield {
@@ -156,12 +158,11 @@ class ExternalProjectAccessScanner(base_scanner.BaseScanner):
                     [resource_util.create_resource(
                         resource['resourceId']['id'],
                         resource['resourceId']['type']
-                     ) for resource in crm_client.get_project_ancestry(project_id)]
+                    ) for resource in crm_client.get_project_ancestry(project_id)]
             ancestries.append(self._ancestries[project_id])
         return ancestries
-        
 
-    def _retrieve_improved(self):
+    def _retrieve(self):
         """Retrieves the data for scanner.
 
         Returns:
@@ -187,7 +188,7 @@ class ExternalProjectAccessScanner(base_scanner.BaseScanner):
                     project_ancestries_by_user[user_email] = self._project_ancestries_by_user(user_email)
                 except KeyError:
                     LOGGER.debug('User %s doesn\'t have any projects.',
-                                    user_email)
+                                 user_email)
                 except RefreshError:
                     LOGGER.debug('Couldn\'t retrieve projects for user %s',
                                  user_email)
@@ -202,6 +203,6 @@ class ExternalProjectAccessScanner(base_scanner.BaseScanner):
 
     def run(self):
         """Runs the data collection."""
-        project_ancestries_by_user = self._retrieve_improved()
+        project_ancestries_by_user = self._retrieve()
         all_violations = self._find_violations(project_ancestries_by_user)
         self._output_results(all_violations)

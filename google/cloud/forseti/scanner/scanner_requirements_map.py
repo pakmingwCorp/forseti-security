@@ -42,7 +42,7 @@ REQUIREMENTS_MAP = {
         {'module_name': 'enabled_apis_scanner',
          'class_name': 'EnabledApisScanner',
          'rules_filename': 'enabled_apis_rules.yaml'},
-    'external_project_access': 
+    'external_project_access':
         {'module_name': 'external_project_access_scanner',
          'class_name': 'ExternalProjectAccessScanner',
          'rules_filename': 'external_project_access_rules.yaml'},
