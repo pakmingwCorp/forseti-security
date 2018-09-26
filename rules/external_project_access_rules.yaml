@@ -13,5 +13,5 @@
 # limitations under the License.
 
 rules:
-- name: Default
+- name: Find external project access in organization.
   ancestor: "organizations/1234567"

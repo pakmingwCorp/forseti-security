@@ -16,15 +16,15 @@
 from collections import namedtuple
 import itertools
 import re
+
+from google.cloud.forseti.common.gcp_type import resource as resource_mod
+from google.cloud.forseti.common.gcp_type import resource_util
 from google.cloud.forseti.common.util import logger
 from google.cloud.forseti.scanner.audit import errors as audit_errors
 from google.cloud.forseti.scanner.audit import base_rules_engine as bre
-from google.cloud.forseti.common.gcp_type import resource as resource_mod
-from google.cloud.forseti.common.gcp_type import resource_util
-
-
 
 LOGGER = logger.get_logger(__name__)
+
 
 class ExternalProjectAccessRulesEngine(bre.BaseRulesEngine):
     """Rules engine for External Project Access."""
@@ -48,18 +48,19 @@ class ExternalProjectAccessRulesEngine(bre.BaseRulesEngine):
         Args:
             global_configs (dict): Inventory configurations.
         """
-        self.rule_book = \
-            ExternalProjectAccessRuleBook(global_configs,
-                                          self._load_rule_definitions())
+        self.rule_book = (
+            ExternalProjectAccessRuleBook(
+                global_configs,
+                self._load_rule_definitions()))
 
     # TODO: The naming is confusing and needs to be fixed in all scanners.
     def find_policy_violations(self, user_email,
                                project_ancestry,
                                force_rebuild=False):
-        """Determine whether CloudSQL acls violates rules.
+        """Determine whether project ancestry violates rules.
 
         Args:
-            user_email (str): The ID of the project
+            user_email (str): The user's e-mail
             project_ancestry (list): List of ancestries which turn
                                      out to a list of resources.
             force_rebuild (bool): Force the rebuild of the rule book
@@ -73,14 +74,13 @@ class ExternalProjectAccessRulesEngine(bre.BaseRulesEngine):
 
         # If the ancestor found in the rule is not in the project_ancestry
         # ancestors, then this is a rule violation
-        rules_violated = [rule for ancestor, rule in \
-                          self.rule_book.resource_rules_map.iteritems() if \
-                          ancestor not in project_ancestry]
-        # If there is at least rule not violated, that means that a project
-        # meets the whitelisting requirements.
-        rules_not_violated = [rule for ancestor, rule in \
-                             self.rule_book.resource_rules_map.iteritems() \
-                             if rule not in rules_violated]
+        rules_violated = []
+        rules_not_violated = []
+        for ancestor, rule in self.rule_book.resource_rules_map.iteritems():
+            if ancestor not in project_ancestry:
+                rules_violated.append(rule)
+            else:
+                rules_not_violated.append(rule)
 
         if not rules_not_violated:
             for rule in rules_violated:
@@ -89,6 +89,7 @@ class ExternalProjectAccessRulesEngine(bre.BaseRulesEngine):
                     rule.policy_violation(user_email, project_ancestry))
 
         return violations
+
 
 class ExternalProjectAccessRuleBook(bre.BaseRuleBook):
     """The RuleBook for ExternalProjectAccess resources."""
@@ -147,6 +148,7 @@ class ExternalProjectAccessRuleBook(bre.BaseRuleBook):
     @classmethod
     def process_rule(cls, rule_def, rule_index):
         """Process a rule.
+
         Args:
             rule_def (dict): A dictionary containing rule definition
                 properties.
@@ -165,6 +167,7 @@ class ExternalProjectAccessRuleBook(bre.BaseRuleBook):
     @classmethod
     def validate_ancestor(cls, ancestor, rule_index):
         """Validate the ancestor in a rule.
+
         Args:
             ancestor (str): The ancestor defined by the rule.
             rule_index (int): The index of the rule from the rule definitions.
@@ -172,16 +175,18 @@ class ExternalProjectAccessRuleBook(bre.BaseRuleBook):
 
         """
 
-        if not ancestor or len(ancestor) < 1:
+        if not ancestor:
             raise audit_errors.InvalidRulesSchemaError(
                 'Missing ancestor in rule {}'.format(rule_index))
 
         ancestor_result = cls.ancestor_pattern.match(ancestor)
 
         if not ancestor_result:
-            raise audit_errors.InvalidRulesSchemaError(
-                ('Ancestor in rule {} must start with ' +
-                 '\"organization/\" or \"folder/\"').format(rule_index))
+            message = ('Ancestor in rule {} must start with '
+                       '\"organization/\" or \"folder/\"')
+            message.format(rule_index)
+            raise audit_errors.InvalidRulesSchemaError(message)
+
 
 class Rule(object):
     """Rule properties from the rule definition file.
@@ -207,6 +212,7 @@ class Rule(object):
         Args:
             user_email (string): The e-mail of the user
             ancestry (dict): The ancestry provided by the scanner
+
         Yields:
             namedtuple: Returns RuleViolation named tuple
         """
@@ -219,8 +225,7 @@ class Rule(object):
             full_name=ancestry[0].name,
             violation_type='EXTERNAL_PROJECT_ACCESS_VIOLATION',
             member=user_email,
-            resource_data=','.join([resource.name for resource in ancestry])
-            )
+            resource_data=','.join([resource.name for resource in ancestry]))
 
     # Rule violation.
     # resource_type: string
@@ -237,5 +242,4 @@ class Rule(object):
                                 'full_name',
                                 'violation_type',
                                 'member',
-                                'resource_data',
-                               ])
+                                'resource_data'])

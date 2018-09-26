@@ -16,16 +16,17 @@
 # pylint: disable=line-too-long
 import time
 import itertools
+
+from google.auth.exceptions import RefreshError
 from google.cloud.forseti.common.util import logger
-from google.cloud.forseti.scanner.scanners import base_scanner
-from google.cloud.forseti.common.gcp_api.api_helpers import get_delegated_credential
-from google.cloud.forseti.common.gcp_api.cloud_resource_manager import CloudResourceManagerClient
+from google.cloud.forseti.common.gcp_api.api_helpers import get_delegated_credential # noqa=E501
+from google.cloud.forseti.common.gcp_api.cloud_resource_manager import CloudResourceManagerClient # noqa=E501
 from google.cloud.forseti.common.gcp_type import resource_util
-from google.cloud.forseti.scanner.audit import external_project_access_rules_engine
+from google.cloud.forseti.scanner.audit import external_project_access_rules_engine as epa_rules_engine # noqa=E501
+from google.cloud.forseti.scanner.scanners import base_scanner
 from google.cloud.forseti.services.inventory.storage import DataAccess
 from google.cloud.forseti.services.inventory.storage import Storage
-from google.auth.exceptions import RefreshError
-#pylint: enable=line-too-long
+# pylint: enable=line-too-long
 
 LOGGER = logger.get_logger(__name__)
 
@@ -57,10 +58,10 @@ class ExternalProjectAccessScanner(base_scanner.BaseScanner):
 
         self.inventory_configs = self.service_config.get_inventory_config()
         self.rules_engine = \
-                external_project_access_rules_engine.ExternalProjectAccessRulesEngine(
-                    rules_file_path=self.rules,
-                    snapshot_timestamp=self.snapshot_timestamp
-                )
+            epa_rules_engine.ExternalProjectAccessRulesEngine(
+                rules_file_path=self.rules,
+                snapshot_timestamp=self.snapshot_timestamp
+            )
         self.rules_engine.build_rule_book(self.inventory_configs)
 
         self._ancestries = dict()
@@ -75,12 +76,11 @@ class ExternalProjectAccessScanner(base_scanner.BaseScanner):
 
         self._output_results_to_db(all_violations)
 
-
-    def _find_violations(self, project_ancestries_by_user):
+    def _find_violations(self, ancestries_by_user):
         """Find violations in the policies.
 
         Args:
-            project_ancestries_by_user (dict): The project ancestries collected
+            ancestries_by_user (dict): The project ancestries collected
                                                from the scanner
         Returns:
             list: A list of ExternalProjectAccess violations
@@ -88,11 +88,12 @@ class ExternalProjectAccessScanner(base_scanner.BaseScanner):
         all_violations = []
         LOGGER.info('Finding project access violations...')
 
-        for user_mail, project_ancestries in \
-            project_ancestries_by_user.iteritems():
+        for user_mail, project_ancestries in ancestries_by_user.iteritems():
+
             for project_ancestry in project_ancestries:
-                violations = self.rules_engine.find_policy_violations(user_mail,
-                                                                      project_ancestry)
+                violations = \
+                    self.rules_engine.find_policy_violations(user_mail,
+                                                             project_ancestry)
                 all_violations.extend(violations)
 
         return all_violations
@@ -126,9 +127,9 @@ class ExternalProjectAccessScanner(base_scanner.BaseScanner):
                 'resource_data': violation.resource_data
             }
 
-
     def _project_ancestries_by_user(self, user_email):
         """Retrieves the list of ancestries for a user.
+
         Args:
             user_email (str): The e-mail address against which
                               to query.
@@ -143,8 +144,8 @@ class ExternalProjectAccessScanner(base_scanner.BaseScanner):
             credentials=user_creds)
         # Get a list of project ID's
         project_id_result = [[project['projectId']
-                              for project in projects['projects']] \
-                              for projects in crm_client.get_projects()]
+                              for project in projects['projects']]
+                             for projects in crm_client.get_projects()]
 
         project_ids = itertools.chain.from_iterable(project_id_result)
 
@@ -153,12 +154,15 @@ class ExternalProjectAccessScanner(base_scanner.BaseScanner):
             # To increase speed, we'll keep track of the projects
             # for which we have already queried the ancestry.
             if project_id not in self._ancestries.keys():
+                self._ancestries[project_id] = []
                 # We'll create Resource objects for each resource
-                self._ancestries[project_id] = \
-                    [resource_util.create_resource(
-                        resource['resourceId']['id'],
-                        resource['resourceId']['type']
-                    ) for resource in crm_client.get_project_ancestry(project_id)]
+                for resource in crm_client.get_project_ancestry(project_id):
+                    self._ancestries[project_id].append(
+                        resource_util.create_resource(
+                            resource['resourceId']['id'],
+                            resource['resourceId']['type']
+                        )
+                    )
             ancestries.append(self._ancestries[project_id])
         return ancestries
 
@@ -174,18 +178,24 @@ class ExternalProjectAccessScanner(base_scanner.BaseScanner):
         project_ancestries_by_user = dict()
         user_count = 0
         with self.service_config.scoped_session() as session:
-            inventory_index_id = DataAccess.get_latest_inventory_index_id(session)
-            inventory_storage = Storage(session, inventory_index_id, readonly=True)
+            inventory_index_id = \
+                DataAccess.get_latest_inventory_index_id(session)
+
+            inventory_storage = \
+                Storage(session, inventory_index_id, readonly=True)
             inventory_storage.open()
 
             start_time = time.time()
 
-            for inventory_row in inventory_storage.iter(type_list=member_type_list):
+            for inventory_row in \
+                    inventory_storage.iter(type_list=member_type_list):
+
                 user_count += 1
                 user_email = inventory_row.get_resource_data()['email']
 
                 try:
-                    project_ancestries_by_user[user_email] = self._project_ancestries_by_user(user_email)
+                    project_ancestries_by_user[user_email] = \
+                        self._project_ancestries_by_user(user_email)
                 except KeyError:
                     LOGGER.debug('User %s doesn\'t have any projects.',
                                  user_email)
