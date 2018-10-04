@@ -32,6 +32,118 @@ LOGGER = logger.get_logger(__name__)
 
 SCOPES = ['https://www.googleapis.com/auth/cloudplatformprojects.readonly']
 
+DISCOVERED_ANCESTRIES = dict()
+
+def user_emails(service_config):
+    """Retrieves the list of user email addresses from inventory.
+
+    Args:
+        service_config (dict): The service configuration
+
+    Returns:
+        list: List of list of user e-mail addresses.
+    """
+    member_type_list = [
+        'gsuite_user_member'
+    ]
+    emails = []
+    with service_config.scoped_session() as session:
+        inventory_index_id = \
+            DataAccess.get_latest_inventory_index_id(session)
+        inventory_storage = \
+            Storage(session, inventory_index_id, readonly=True)
+        inventory_storage.open()
+        for inventory_row in \
+            inventory_storage.iter(type_list=member_type_list):
+            emails.append(inventory_row.get_resource_data()['email'])\
+
+    return emails
+
+class UserCloudResourceManagerClient(CloudResourceManagerClient):
+    """Extends CRM client."""
+
+    def __init__(self, user_email, inventory_configs, scopes):
+        """Initialization.
+
+        Args:
+            user_email (str): User e-mail address
+            inventory_configs (dict): Inventory configurations.
+            scopes (list): The list of required scopes for the service account.
+        """
+        self.user_email = user_email
+        self.scopes = scopes
+        super(UserCloudResourceManagerClient, self).__init__(
+            global_configs=inventory_configs,
+            credentials=self.delegated_credential)
+        self._project_ids = []
+
+    @property
+    def delegated_credential(self):
+        """Returns a delegated credential for the user
+
+        Returns:
+            service_account.Credentials: Credentials as built by
+            google.oauth2.service_account.
+        """
+        return get_delegated_credential(self.user_email, self.scopes)
+
+    @property
+    def project_ids(self):
+        """Get a list of project ID's
+
+        Returns:
+            list: A list of project ID's
+        """
+
+        if not self._project_ids:
+            project_id_result = [[project['projectId']
+                                  for project in projects['projects']]
+                                 for projects in self.get_projects()]
+
+            self._project_ids = \
+                list(itertools.chain.from_iterable(project_id_result))
+
+        return self._project_ids
+
+    def get_project_ancestry_resources(self, project_id):
+        """Get a list of project ancestors as type Resource
+        Args:
+            project_id (str): The project identifier
+
+        Returns:
+            list: A list of project ancestors as type
+                  Resource.  The first element is the
+                  project itself.  The last is the
+                  organization.
+        """
+
+        if project_id not in DISCOVERED_ANCESTRIES.keys():
+            DISCOVERED_ANCESTRIES[project_id] = []
+            ancestries = self.get_project_ancestry(project_id)
+            # We'll create Resource objects for each resource
+            for resource in ancestries:
+                DISCOVERED_ANCESTRIES[project_id].append(
+                    resource_util.create_resource(
+                        resource['resourceId']['id'],
+                        resource['resourceId']['type']
+                    )
+                )
+        return DISCOVERED_ANCESTRIES[project_id]
+
+    @property
+    def project_ancestries(self):
+        """Gets a list of lists of all ancestry chains for
+           all projects to which the user has access.
+
+        Returns:
+            list: A list of lists of ancestry chains.
+        """
+
+        ancestries = []
+        for project_id in self.project_ids:
+            ancestries.append(self.get_project_ancestry(project_id))
+        return ancestries
+
 
 class ExternalProjectAccessScanner(base_scanner.BaseScanner):
     """Scanner for external project access."""
@@ -127,87 +239,40 @@ class ExternalProjectAccessScanner(base_scanner.BaseScanner):
                 'resource_data': violation.resource_data
             }
 
-    def _project_ancestries_by_user(self, user_email):
-        """Retrieves the list of ancestries for a user.
-
-        Args:
-            user_email (str): The e-mail address against which
-                              to query.
-        Returns:
-            list: List of list of resource ancestry chains.
-        """
-        ancestries = []
-        user_creds = get_delegated_credential(user_email, SCOPES)
-        # Get the resource manager client
-        crm_client = CloudResourceManagerClient(
-            global_configs=self.inventory_configs,
-            credentials=user_creds)
-        # Get a list of project ID's
-        project_id_result = [[project['projectId']
-                              for project in projects['projects']]
-                             for projects in crm_client.get_projects()]
-
-        project_ids = itertools.chain.from_iterable(project_id_result)
-
-        # For each of the project ID's we will get the ancestry
-        for project_id in project_ids:
-            # To increase speed, we'll keep track of the projects
-            # for which we have already queried the ancestry.
-            if project_id not in self._ancestries.keys():
-                self._ancestries[project_id] = []
-                # We'll create Resource objects for each resource
-                for resource in crm_client.get_project_ancestry(project_id):
-                    self._ancestries[project_id].append(
-                        resource_util.create_resource(
-                            resource['resourceId']['id'],
-                            resource['resourceId']['type']
-                        )
-                    )
-            ancestries.append(self._ancestries[project_id])
-        return ancestries
-
     def _retrieve(self):
         """Retrieves the data for scanner.
 
         Returns:
             dict: User project relationship.
         """
-        member_type_list = [
-            'gsuite_user_member'
-        ]
+
         project_ancestries_by_user = dict()
         user_count = 0
-        with self.service_config.scoped_session() as session:
-            inventory_index_id = \
-                DataAccess.get_latest_inventory_index_id(session)
 
-            inventory_storage = \
-                Storage(session, inventory_index_id, readonly=True)
-            inventory_storage.open()
+        start_time = time.time()
 
-            start_time = time.time()
+        for user_email in user_emails(self.service_config):
 
-            for inventory_row in \
-                    inventory_storage.iter(type_list=member_type_list):
+            user_count += 1
 
-                user_count += 1
-                user_email = inventory_row.get_resource_data()['email']
+            user_client = UserCloudResourceManagerClient(user_email,
+                                                         self.inventory_configs,
+                                                         SCOPES)
+            try:
+                project_ancestries_by_user[user_email] = \
+                    user_client.project_ancestries
+            except KeyError:
+                LOGGER.debug('User %s doesn\'t have any projects.',
+                             user_email)
+            except RefreshError:
+                LOGGER.debug('Couldn\'t retrieve projects for user %s',
+                             user_email)
 
-                try:
-                    project_ancestries_by_user[user_email] = \
-                        self._project_ancestries_by_user(user_email)
-                except KeyError:
-                    LOGGER.debug('User %s doesn\'t have any projects.',
-                                 user_email)
-                except RefreshError:
-                    LOGGER.debug('Couldn\'t retrieve projects for user %s',
-                                 user_email)
+        elapsed_time = time.time() - start_time
 
-            elapsed_time = time.time() - start_time
-
-            LOGGER.debug('It took %f seconds to query projects for %d users',
-                         elapsed_time,
-                         user_count)
+        LOGGER.debug('It took %f seconds to query projects for %d users',
+                     elapsed_time,
+                     user_count)
 
         return project_ancestries_by_user
 

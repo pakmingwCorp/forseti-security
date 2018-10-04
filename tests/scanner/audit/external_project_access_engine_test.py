@@ -20,16 +20,15 @@ import traceback
 import mock
 import yaml
 
-from tests.unittest_utils import ForsetiTestCase
-from google.cloud.forseti.common.util import file_loader
-from google.cloud.forseti.scanner.audit import errors
 from google.cloud.forseti.scanner.audit import external_project_access_rules_engine as epare
-from tests.unittest_utils import get_datafile_path
 from google.cloud.forseti.scanner.audit import errors as audit_errors
 from google.cloud.forseti.services.inventory.base import resources
+from google.cloud.forseti.common.gcp_type.folder import Folder
 from google.cloud.forseti.common.gcp_type.organization import Organization
 from google.cloud.forseti.common.gcp_type.project import Project
-from google.cloud.forseti.common.gcp_type.folder import Folder
+from google.cloud.forseti.common.util import file_loader
+from tests.unittest_utils import ForsetiTestCase
+from tests.unittest_utils import get_datafile_path
 
 class ExternalProjectAccessRulesEngineTest(ForsetiTestCase):
 
@@ -66,7 +65,7 @@ class ExternalProjectAccessRulesEngineTest(ForsetiTestCase):
         rules_local_path = get_datafile_path(__file__,
             'external_project_access_test_rules_2.yaml')
         rules_engine = epare.ExternalProjectAccessRulesEngine(rules_file_path=rules_local_path)
-        with self.assertRaises(errors.InvalidRulesSchemaError):
+        with self.assertRaises(audit_errors.InvalidRulesSchemaError):
             rules_engine.build_rule_book(self.inventory_config)
 
     def test_no_viloations(self):
@@ -130,7 +129,7 @@ class ExternalProjectAccessRuleBookTest(ForsetiTestCase):
             self.fail("Unexpected exception thrown")
     
     def test_validate_bad_ancestor(self):
-        with self.assertRaises(errors.InvalidRulesSchemaError): 
+        with self.assertRaises(audit_errors.InvalidRulesSchemaError): 
             self.rule_book.validate_ancestor(ExternalProjectAccessRuleBookTest.TEST_BAD_RULE['ancestor'], 0)
 
     def test_process_good_rule(self):
@@ -142,7 +141,7 @@ class ExternalProjectAccessRuleBookTest(ForsetiTestCase):
             self.fail("Unexpected exception thrown: " + str(e))
 
     def test_process_bad_rule(self):
-        with self.assertRaises(errors.InvalidRulesSchemaError): 
+        with self.assertRaises(audit_errors.InvalidRulesSchemaError): 
             self.rule_book.process_rule(ExternalProjectAccessRuleBookTest.TEST_BAD_RULE, 0)
 
     def test_add_rule(self):
